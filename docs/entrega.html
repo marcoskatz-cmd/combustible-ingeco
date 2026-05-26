@@ -24,13 +24,7 @@
       <input type="text" id="equipo" autocomplete="off" required>
 
       <label>Código interno de equipo / N° de patente <span class="req">*</span></label>
-      <div id="codigoWrap">
-        <select id="codigoSelect" class="hidden" required>
-          <option value="">Cargando códigos…</option>
-        </select>
-        <input type="text" id="codigoTexto" autocomplete="off" required>
-        <small id="codigoHelp" class="help">Cargando códigos válidos…</small>
-      </div>
+      <input type="text" id="codigoInterno" autocomplete="off" required>
 
       <label>Estado de horómetro u odómetro <span class="req">*</span></label>
       <select id="estadoHorometro" required>
@@ -182,57 +176,6 @@
       });
     });
 
-    // ====== Códigos via JSONP (esquiva CORS con un <script src>) ======
-    function escapeHtml(s) {
-      return String(s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-    (function loadCodigos() {
-      const cbName = 'cbCodigos_' + Math.random().toString(36).slice(2, 10);
-      const timeout = setTimeout(function() {
-        document.getElementById('codigoHelp').textContent =
-          'No se pudo leer la planilla de códigos. Escribilo a mano.';
-        cleanup();
-      }, 10000);
-
-      function cleanup() {
-        try { delete window[cbName]; } catch(_) { window[cbName] = undefined; }
-        if (script.parentNode) script.parentNode.removeChild(script);
-      }
-
-      window[cbName] = function(res) {
-        clearTimeout(timeout);
-        const sel = document.getElementById('codigoSelect');
-        const txt = document.getElementById('codigoTexto');
-        const help = document.getElementById('codigoHelp');
-        if (res && res.ok && res.codigos && res.codigos.length) {
-          sel.innerHTML = '<option value="">Elegí un código…</option>' +
-            res.codigos.map(function(c) {
-              return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
-            }).join('');
-          sel.classList.remove('hidden');
-          txt.classList.add('hidden');
-          txt.removeAttribute('required');
-          sel.setAttribute('required', 'required');
-          help.textContent = res.codigos.length + ' códigos cargados desde la planilla maestra.';
-        } else {
-          help.textContent = 'No se pudo leer la planilla de códigos. Escribilo a mano.';
-        }
-        cleanup();
-      };
-
-      const script = document.createElement('script');
-      script.onerror = function() {
-        clearTimeout(timeout);
-        document.getElementById('codigoHelp').textContent =
-          'No se pudo leer la planilla de códigos. Escribilo a mano.';
-        cleanup();
-      };
-      script.src = window.API_URL + '?api=codigos&callback=' + cbName;
-      document.head.appendChild(script);
-    })();
-
     // ====== Estado UI ======
     const estado = document.getElementById('estado');
     function mostrarError(msg) {
@@ -270,18 +213,12 @@
     btn.addEventListener('click', function() {
       ocultarEstado();
 
-      const sel = document.getElementById('codigoSelect');
-      const txt = document.getElementById('codigoTexto');
-      const codigoInterno = sel.classList.contains('hidden')
-        ? txt.value.trim()
-        : sel.value.trim();
-
       const data = {
         action: 'guardarEntrega',
         fecha: document.getElementById('fecha').value,
         operario: document.getElementById('operario').value.trim(),
         equipo: document.getElementById('equipo').value.trim(),
-        codigoInterno: codigoInterno,
+        codigoInterno: document.getElementById('codigoInterno').value.trim(),
         estadoHorometro: document.getElementById('estadoHorometro').value,
         horometroActual: document.getElementById('horometroActual').value,
         lugarEntrega: document.getElementById('lugarEntrega').value.trim(),
@@ -330,12 +267,10 @@
 
     document.getElementById('btnOtra').addEventListener('click', function() {
       document.getElementById('fecha').valueAsDate = new Date();
-      ['operario','equipo','codigoTexto','horometroActual','lugarEntrega','cantidadLitros']
+      ['operario','equipo','codigoInterno','horometroActual','lugarEntrega','cantidadLitros']
         .forEach(function(id) { document.getElementById(id).value = ''; });
       document.getElementById('estadoHorometro').value = '';
       document.getElementById('tipoCombustible').value = '';
-      const sel = document.getElementById('codigoSelect');
-      if (!sel.classList.contains('hidden')) sel.value = '';
       firmaOp.borrar();
       firmaResp.borrar();
       ocultarEstado();

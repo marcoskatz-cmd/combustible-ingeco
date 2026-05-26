@@ -24,8 +24,10 @@ const CARPETA_FIRMAS_ID = '15q4K7wT_O_m_O5EOJzV_oW01SF4B32aH';
 // ====== Códigos de equipos (mejora recomendada) ======
 // ID del Sheet de INGECO con códigos válidos de equipos (4 pestañas)
 const SHEET_CODIGOS_ID = '1JKVZB43VqhIenkrefSefcZrqy8_7QADHPPHqKi4OkH4';
-// Si la cuenta deployer no tiene permiso de lectura, el cliente cae a input texto libre
-const USAR_DROPDOWN_CODIGOS = true;
+// Dropdown desactivado por decisión del usuario: el campo de código en el form
+// de entrega es texto libre. El endpoint JSONP queda disponible por si en el
+// futuro se quiere volver a habilitar, pero el frontend ya no lo consume.
+const USAR_DROPDOWN_CODIGOS = false;
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
