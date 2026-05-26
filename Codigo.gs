@@ -239,9 +239,10 @@ function _guardarFirma(dataUrl, rol) {
 
 function guardarEntrega(data) {
   try {
+    // El horómetro NO es requerido cuando estado === 'No funciona' — se valida aparte.
     _validar(data, [
       'fecha', 'operario', 'equipo', 'codigoInterno', 'estadoHorometro',
-      'horometroActual', 'lugarEntrega', 'cantidadLitros', 'tipoCombustible',
+      'lugarEntrega', 'cantidadLitros', 'tipoCombustible',
       'firmaOperario', 'firmaResponsable'
     ]);
 
@@ -250,14 +251,20 @@ function guardarEntrega(data) {
       throw new Error('La cantidad de litros debe ser un número mayor a 0.');
     }
 
-    const horometro = _numeroValido(data.horometroActual, 0);
-    if (horometro === null) {
-      throw new Error('El horómetro debe ser un número mayor o igual a 0.');
-    }
-
     const estadosValidos = ['Sí funciona', 'No funciona'];
     if (estadosValidos.indexOf(data.estadoHorometro) < 0) {
       throw new Error('Estado de horómetro inválido.');
+    }
+
+    // Si el horómetro funciona, exigimos número >= 0. Si no funciona,
+    // dejamos la celda vacía para que sea evidente que no aplica.
+    let horometro = '';
+    if (data.estadoHorometro === 'Sí funciona') {
+      const h = _numeroValido(data.horometroActual, 0);
+      if (h === null) {
+        throw new Error('El horómetro debe ser un número mayor o igual a 0.');
+      }
+      horometro = h;
     }
 
     const tiposValidos = ['Diesel 500', 'Diesel Infinia'];

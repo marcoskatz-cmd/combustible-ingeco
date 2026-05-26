@@ -41,7 +41,7 @@
         <option value="No funciona">No funciona</option>
       </select>
 
-      <label>Horómetro u odómetro actual (horas o km) <span class="req">*</span></label>
+      <label id="horometroLabel">Horómetro u odómetro actual (horas o km) <span class="req">*</span></label>
       <input type="number" id="horometroActual" inputmode="decimal" min="0" step="0.01" required>
 
       <label>Lugar de entrega de combustible <span class="req">*</span></label>
@@ -172,6 +172,31 @@
       });
     });
 
+    // ====== Habilitar/deshabilitar campo horómetro según estado ======
+    // Si el horómetro "No funciona", el operario no debería tener que cargar
+    // un valor. Lo deshabilitamos visualmente y lo excluimos de la validación.
+    const estadoSel = document.getElementById('estadoHorometro');
+    const horoInput = document.getElementById('horometroActual');
+    const horoLabel = document.getElementById('horometroLabel');
+
+    function sincronizarHorometro() {
+      const noFunciona = estadoSel.value === 'No funciona';
+      if (noFunciona) {
+        horoInput.value = '';
+        horoInput.disabled = true;
+        horoInput.removeAttribute('required');
+        horoInput.placeholder = 'No aplica';
+        horoLabel.style.opacity = '0.5';
+      } else {
+        horoInput.disabled = false;
+        horoInput.setAttribute('required', 'required');
+        horoInput.placeholder = '';
+        horoLabel.style.opacity = '';
+      }
+    }
+    estadoSel.addEventListener('change', sincronizarHorometro);
+    sincronizarHorometro();
+
     // ====== Estado UI ======
     const estado = document.getElementById('estado');
     function mostrarError(msg) {
@@ -209,8 +234,12 @@
       if (!data.equipo) faltantes.push('Equipo');
       if (!data.codigoInterno) faltantes.push('Código interno');
       if (!data.estadoHorometro) faltantes.push('Estado de horómetro');
-      if (data.horometroActual === '' || isNaN(Number(data.horometroActual)))
+      // Solo exigimos horómetro si funciona; si no, mandamos cadena vacía.
+      if (data.estadoHorometro === 'No funciona') {
+        data.horometroActual = '';
+      } else if (data.horometroActual === '' || isNaN(Number(data.horometroActual))) {
         faltantes.push('Horómetro actual');
+      }
       if (!data.lugarEntrega) faltantes.push('Lugar de entrega');
       if (data.cantidadLitros === '' || isNaN(Number(data.cantidadLitros)) || Number(data.cantidadLitros) <= 0)
         faltantes.push('Cantidad (litros)');
