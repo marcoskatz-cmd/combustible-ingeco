@@ -32,11 +32,17 @@ const TZ = 'America/Argentina/Buenos_Aires';
 // ====== Router ======
 
 function doGet(e) {
-  // ---- JSONP endpoint para frontend en GitHub Pages ----
+  // ---- JSONP endpoints para frontend en GitHub Pages ----
   // Esquivamos CORS usando un <script src> en el cliente.
-  if (e && e.parameter && e.parameter.api === 'codigos' && e.parameter.callback) {
-    const result = getCodigosEquipos();
+  if (e && e.parameter && e.parameter.callback) {
     const cb = String(e.parameter.callback).replace(/[^a-zA-Z0-9_]/g, '');
+    let result;
+    switch (e.parameter.api) {
+      case 'codigos':  result = getCodigosEquipos(); break;
+      case 'resumen':  result = getResumen(); break;
+      case 'entregas': result = getUltimasEntregas(e.parameter.n); break;
+      default:         result = { ok: false, error: 'API desconocida: ' + String(e.parameter.api) };
+    }
     return ContentService
       .createTextOutput(cb + '(' + JSON.stringify(result) + ');')
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -356,5 +362,109 @@ function getCodigosEquipos() {
     return { ok: true, codigos: lista };
   } catch (err) {
     return { ok: false, codigos: [], error: (err && err.message) ? err.message : String(err) };
+  }
+}
+
+// ====== Resumen: stock disponible + últimas entregas ======
+// Balance = Σ stock inicial + Σ reposiciones − Σ entregas (por tipo).
+// Se asume que "Stock inicial" suma cada vez que se carga (no es un reset).
+//
+// IMPORTANTE: normalizamos los nombres de combustible para que el cálculo
+// funcione a pesar de la inconsistencia heredada de los formularios viejos:
+//   - ENTREGAS guarda "Diesel 500" o "Diesel Infinia"
+//   - REPOSICIONES/STOCK_INICIAL guardan columnas DIESEL_500_* e INFINIA_500_*
+// Tratamos "Diesel Infinia" e "Infinia 500" como el mismo tipo a efectos del balance.
+function getResumen() {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+
+    let diesel500 = 0;
+    let infinia500 = 0;
+
+    const stockSheet = ss.getSheetByName('STOCK_INICIAL');
+    if (stockSheet && stockSheet.getLastRow() > 1) {
+      const stockData = stockSheet.getRange(2, 1, stockSheet.getLastRow() - 1, 3).getValues();
+      for (let i = 0; i < stockData.length; i++) {
+        diesel500  += Number(stockData[i][1]) || 0;
+        infinia500 += Number(stockData[i][2]) || 0;
+      }
+    }
+
+    const repoSheet = ss.getSheetByName('REPOSICIONES');
+    if (repoSheet && repoSheet.getLastRow() > 1) {
+      const repoData = repoSheet.getRange(2, 1, repoSheet.getLastRow() - 1, 3).getValues();
+      for (let i = 0; i < repoData.length; i++) {
+        diesel500  += Number(repoData[i][1]) || 0;
+        infinia500 += Number(repoData[i][2]) || 0;
+      }
+    }
+
+    const entSheet = ss.getSheetByName('ENTREGAS');
+    let totalEntregas = 0;
+    if (entSheet && entSheet.getLastRow() > 1) {
+      const entData = entSheet.getRange(2, 1, entSheet.getLastRow() - 1, 9).getValues();
+      for (let i = 0; i < entData.length; i++) {
+        const litros = Number(entData[i][7]) || 0;
+        const tipo   = String(entData[i][8] || '').trim();
+        if (tipo === 'Diesel 500') {
+          diesel500 -= litros;
+        } else if (tipo === 'Diesel Infinia' || tipo === 'Infinia 500') {
+          infinia500 -= litros;
+        }
+        totalEntregas++;
+      }
+    }
+
+    // Redondeo a 2 decimales para evitar ruido tipo 1234.5000000001
+    diesel500  = Math.round(diesel500  * 100) / 100;
+    infinia500 = Math.round(infinia500 * 100) / 100;
+
+    return {
+      ok: true,
+      disponible: {
+        'Diesel 500':  diesel500,
+        'Infinia 500': infinia500
+      },
+      total_entregas: totalEntregas
+    };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) ? err.message : String(err) };
+  }
+}
+
+// Últimas N entregas (sin filtrar por operario — todos ven la actividad
+// completa para tener contexto, y cada uno ve las suyas entre medio).
+function getUltimasEntregas(n) {
+  try {
+    const cantidad = Math.min(Math.max(Number(n) || 20, 1), 100);
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sh = ss.getSheetByName('ENTREGAS');
+    if (!sh || sh.getLastRow() < 2) return { ok: true, entregas: [] };
+
+    const data = sh.getRange(2, 1, sh.getLastRow() - 1, 12).getValues();
+    const rows = data
+      .filter(function(r) { return r[0]; })
+      .sort(function(a, b) {
+        const ta = a[11] instanceof Date ? a[11].getTime() : 0;
+        const tb = b[11] instanceof Date ? b[11].getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, cantidad)
+      .map(function(r) {
+        return {
+          fecha:           r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'yyyy-MM-dd') : String(r[0]),
+          operario:        String(r[1] || ''),
+          equipo:          String(r[2] || ''),
+          codigoInterno:   String(r[3] || ''),
+          lugarEntrega:    String(r[6] || ''),
+          cantidadLitros:  Number(r[7]) || 0,
+          tipoCombustible: String(r[8] || ''),
+          timestamp:       r[11] instanceof Date ? Utilities.formatDate(r[11], TZ, 'yyyy-MM-dd HH:mm') : ''
+        };
+      });
+
+    return { ok: true, entregas: rows };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) ? err.message : String(err) };
   }
 }
