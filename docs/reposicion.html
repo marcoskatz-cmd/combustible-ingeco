@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Reposición de combustible</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="app">
+    <div class="marca">INGECO</div>
+    <h1>Reposición de combustible</h1>
+  </header>
+
+  <div class="wrap">
+    <div id="formCard" class="card">
+      <label>Fecha <span class="req">*</span></label>
+      <input type="date" id="fecha" required>
+
+      <label>Cantidad de Diesel 500 recargado (litros) <span class="req">*</span></label>
+      <input type="number" id="diesel500" inputmode="decimal" min="0" step="0.01" required>
+
+      <label>Cantidad de Infinia 500 recargado (litros) <span class="req">*</span></label>
+      <input type="number" id="infinia500" inputmode="decimal" min="0" step="0.01" required>
+
+      <div id="estado" class="estado hidden"></div>
+
+      <div style="height:14px"></div>
+      <button type="button" id="btnEnviar" class="btn">Enviar</button>
+      <div style="height:8px"></div>
+      <a href="index.html" class="btn btn-gris">Volver al menú</a>
+    </div>
+
+    <div id="okCard" class="card hidden">
+      <div class="ok-wrap">
+        <div class="ok-tilde">&#10003;</div>
+        <div class="ok-msg">Reposición registrada con éxito</div>
+        <button id="btnOtra" class="btn">Cargar otra</button>
+        <div style="height:8px"></div>
+        <a href="index.html" class="btn btn-gris">Volver al menú</a>
+      </div>
+    </div>
+  </div>
+
+  <form id="apiForm" method="POST" target="apiFrame" style="display:none">
+    <input type="hidden" name="payload" id="payload">
+  </form>
+  <iframe name="apiFrame" id="apiFrame" style="display:none"></iframe>
+
+  <script src="config.js"></script>
+  <script>
+    document.getElementById('apiForm').action = window.API_URL;
+    document.getElementById('fecha').valueAsDate = new Date();
+
+    const estado = document.getElementById('estado');
+    function mostrarError(msg) {
+      estado.textContent = msg;
+      estado.className = 'estado err';
+      estado.classList.remove('hidden');
+      estado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function ocultarEstado() { estado.classList.add('hidden'); }
+
+    const btn = document.getElementById('btnEnviar');
+    let timeoutEnvio = null;
+
+    window.addEventListener('message', function(ev) {
+      const res = ev.data;
+      if (!res || typeof res !== 'object' || typeof res.ok !== 'boolean') return;
+      if (timeoutEnvio) { clearTimeout(timeoutEnvio); timeoutEnvio = null; }
+      btn.disabled = false;
+      btn.textContent = 'Enviar';
+      if (res.ok) {
+        document.getElementById('formCard').classList.add('hidden');
+        document.getElementById('okCard').classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        mostrarError(res.error || 'Error desconocido al guardar.');
+      }
+    });
+
+    btn.addEventListener('click', function() {
+      ocultarEstado();
+      const data = {
+        action: 'guardarReposicion',
+        fecha: document.getElementById('fecha').value,
+        diesel500: document.getElementById('diesel500').value,
+        infinia500: document.getElementById('infinia500').value
+      };
+      const faltantes = [];
+      if (!data.fecha) faltantes.push('Fecha');
+      if (data.diesel500 === '' || isNaN(Number(data.diesel500)) || Number(data.diesel500) < 0)
+        faltantes.push('Diesel 500');
+      if (data.infinia500 === '' || isNaN(Number(data.infinia500)) || Number(data.infinia500) < 0)
+        faltantes.push('Infinia 500');
+      if (faltantes.length) {
+        mostrarError('Completá: ' + faltantes.join(', '));
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Enviando…';
+      document.getElementById('payload').value = JSON.stringify(data);
+      document.getElementById('apiForm').submit();
+      timeoutEnvio = setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = 'Enviar';
+        mostrarError('Timeout — la conexión no respondió a tiempo. Probá de nuevo.');
+      }, 30000);
+    });
+
+    document.getElementById('btnOtra').addEventListener('click', function() {
+      document.getElementById('fecha').valueAsDate = new Date();
+      ['diesel500','infinia500'].forEach(function(id) { document.getElementById(id).value = ''; });
+      ocultarEstado();
+      document.getElementById('okCard').classList.add('hidden');
+      document.getElementById('formCard').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  </script>
+</body>
+</html>

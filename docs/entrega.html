@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Entrega de combustible</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="app">
+    <div class="marca">INGECO</div>
+    <h1>Entrega de combustible</h1>
+  </header>
+
+  <div class="wrap">
+    <div id="formCard" class="card">
+      <label>Fecha <span class="req">*</span></label>
+      <input type="date" id="fecha" required>
+
+      <label>Operario de equipo (nombre y apellido) <span class="req">*</span></label>
+      <input type="text" id="operario" autocomplete="off" required>
+
+      <label>Equipo destinatario (tipo, marca y modelo) <span class="req">*</span></label>
+      <input type="text" id="equipo" autocomplete="off" required>
+
+      <label>Código interno de equipo / N° de patente <span class="req">*</span></label>
+      <div id="codigoWrap">
+        <select id="codigoSelect" class="hidden" required>
+          <option value="">Cargando códigos…</option>
+        </select>
+        <input type="text" id="codigoTexto" autocomplete="off" required>
+        <small id="codigoHelp" class="help">Cargando códigos válidos…</small>
+      </div>
+
+      <label>Estado de horómetro u odómetro <span class="req">*</span></label>
+      <select id="estadoHorometro" required>
+        <option value="">Elegí una opción</option>
+        <option value="Sí funciona">Sí funciona</option>
+        <option value="No funciona">No funciona</option>
+      </select>
+
+      <label>Horómetro u odómetro actual (horas o km) <span class="req">*</span></label>
+      <input type="number" id="horometroActual" inputmode="decimal" min="0" step="0.01" required>
+
+      <label>Lugar de entrega de combustible <span class="req">*</span></label>
+      <input type="text" id="lugarEntrega" autocomplete="off" required>
+
+      <label>Cantidad de entrega de combustible (litros) <span class="req">*</span></label>
+      <input type="number" id="cantidadLitros" inputmode="decimal" min="0.01" step="0.01" required>
+
+      <label>Tipo de combustible entregado <span class="req">*</span></label>
+      <select id="tipoCombustible" required>
+        <option value="">Elegí una opción</option>
+        <option value="Diesel 500">Diesel 500</option>
+        <option value="Diesel Infinia">Diesel Infinia</option>
+      </select>
+
+      <label>Firma de operario de equipo <span class="req">*</span></label>
+      <div class="firma-wrap">
+        <canvas id="firmaOperario" class="firma-canvas"></canvas>
+        <div class="firma-acciones">
+          <button type="button" data-borrar="firmaOperario">Borrar</button>
+        </div>
+      </div>
+
+      <label>Firma de responsable (Néstor Leandro Casares) <span class="req">*</span></label>
+      <div class="firma-wrap">
+        <canvas id="firmaResponsable" class="firma-canvas"></canvas>
+        <div class="firma-acciones">
+          <button type="button" data-borrar="firmaResponsable">Borrar</button>
+        </div>
+      </div>
+
+      <div id="estado" class="estado hidden"></div>
+
+      <div style="height:14px"></div>
+      <button type="button" id="btnEnviar" class="btn">Enviar</button>
+      <div style="height:8px"></div>
+      <a href="index.html" class="btn btn-gris">Volver al menú</a>
+    </div>
+
+    <div id="okCard" class="card hidden">
+      <div class="ok-wrap">
+        <div class="ok-tilde">&#10003;</div>
+        <div class="ok-msg">Entrega registrada con éxito</div>
+        <button id="btnOtra" class="btn">Cargar otra</button>
+        <div style="height:8px"></div>
+        <a href="index.html" class="btn btn-gris">Volver al menú</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden form + iframe para el truco cross-origin sin CORS.
+       El form hace POST al Apps Script con un único campo "payload"
+       (JSON.stringify de los datos). La respuesta carga en el iframe
+       y desde ahí el Apps Script hace window.parent.postMessage(). -->
+  <form id="apiForm" method="POST" target="apiFrame" style="display:none">
+    <input type="hidden" name="payload" id="payload">
+  </form>
+  <iframe name="apiFrame" id="apiFrame" style="display:none"></iframe>
+
+  <script src="config.js"></script>
+  <script>
+    // ====== Config ======
+    document.getElementById('apiForm').action = window.API_URL;
+
+    // ====== Init ======
+    document.getElementById('fecha').valueAsDate = new Date();
+
+    // ====== Firmas (canvas pointer events) ======
+    function setupFirma(canvas) {
+      const ctx = canvas.getContext('2d');
+      let drawing = false;
+      let last = null;
+      let vacia = true;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        if (!vacia) return;
+        canvas.width = rect.width * ratio;
+        canvas.height = rect.height * ratio;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(ratio, ratio);
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#111';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      function pos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      }
+
+      canvas.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        drawing = true;
+        last = pos(e);
+      });
+      canvas.addEventListener('pointermove', function(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        const p = pos(e);
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        last = p;
+        vacia = false;
+      });
+      function fin(e) {
+        if (!drawing) return;
+        drawing = false;
+        try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+      }
+      canvas.addEventListener('pointerup', fin);
+      canvas.addEventListener('pointercancel', fin);
+      canvas.addEventListener('pointerleave', fin);
+
+      return {
+        borrar: function() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          vacia = true;
+          resize();
+        },
+        vacia: function() { return vacia; },
+        toDataURL: function() { return canvas.toDataURL('image/png'); }
+      };
+    }
+
+    const firmaOp = setupFirma(document.getElementById('firmaOperario'));
+    const firmaResp = setupFirma(document.getElementById('firmaResponsable'));
+    const firmas = { firmaOperario: firmaOp, firmaResponsable: firmaResp };
+
+    document.querySelectorAll('[data-borrar]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        firmas[btn.getAttribute('data-borrar')].borrar();
+      });
+    });
+
+    // ====== Códigos via JSONP (esquiva CORS con un <script src>) ======
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    (function loadCodigos() {
+      const cbName = 'cbCodigos_' + Math.random().toString(36).slice(2, 10);
+      const timeout = setTimeout(function() {
+        document.getElementById('codigoHelp').textContent =
+          'No se pudo leer la planilla de códigos. Escribilo a mano.';
+        cleanup();
+      }, 10000);
+
+      function cleanup() {
+        try { delete window[cbName]; } catch(_) { window[cbName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[cbName] = function(res) {
+        clearTimeout(timeout);
+        const sel = document.getElementById('codigoSelect');
+        const txt = document.getElementById('codigoTexto');
+        const help = document.getElementById('codigoHelp');
+        if (res && res.ok && res.codigos && res.codigos.length) {
+          sel.innerHTML = '<option value="">Elegí un código…</option>' +
+            res.codigos.map(function(c) {
+              return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+            }).join('');
+          sel.classList.remove('hidden');
+          txt.classList.add('hidden');
+          txt.removeAttribute('required');
+          sel.setAttribute('required', 'required');
+          help.textContent = res.codigos.length + ' códigos cargados desde la planilla maestra.';
+        } else {
+          help.textContent = 'No se pudo leer la planilla de códigos. Escribilo a mano.';
+        }
+        cleanup();
+      };
+
+      const script = document.createElement('script');
+      script.onerror = function() {
+        clearTimeout(timeout);
+        document.getElementById('codigoHelp').textContent =
+          'No se pudo leer la planilla de códigos. Escribilo a mano.';
+        cleanup();
+      };
+      script.src = window.API_URL + '?api=codigos&callback=' + cbName;
+      document.head.appendChild(script);
+    })();
+
+    // ====== Estado UI ======
+    const estado = document.getElementById('estado');
+    function mostrarError(msg) {
+      estado.textContent = msg;
+      estado.className = 'estado err';
+      estado.classList.remove('hidden');
+      estado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function ocultarEstado() { estado.classList.add('hidden'); }
+
+    // ====== Envío via form + iframe + postMessage ======
+    const btn = document.getElementById('btnEnviar');
+    let timeoutEnvio = null;
+
+    // Listener para la respuesta del Apps Script (llega via postMessage desde el iframe)
+    window.addEventListener('message', function(ev) {
+      // El iframe es de googleusercontent.com (sub-dominio de Google).
+      // Aceptamos cualquier origen pero validamos forma del mensaje.
+      const res = ev.data;
+      if (!res || typeof res !== 'object' || typeof res.ok !== 'boolean') return;
+
+      if (timeoutEnvio) { clearTimeout(timeoutEnvio); timeoutEnvio = null; }
+      btn.disabled = false;
+      btn.textContent = 'Enviar';
+
+      if (res.ok) {
+        document.getElementById('formCard').classList.add('hidden');
+        document.getElementById('okCard').classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        mostrarError(res.error || 'Error desconocido al guardar.');
+      }
+    });
+
+    btn.addEventListener('click', function() {
+      ocultarEstado();
+
+      const sel = document.getElementById('codigoSelect');
+      const txt = document.getElementById('codigoTexto');
+      const codigoInterno = sel.classList.contains('hidden')
+        ? txt.value.trim()
+        : sel.value.trim();
+
+      const data = {
+        action: 'guardarEntrega',
+        fecha: document.getElementById('fecha').value,
+        operario: document.getElementById('operario').value.trim(),
+        equipo: document.getElementById('equipo').value.trim(),
+        codigoInterno: codigoInterno,
+        estadoHorometro: document.getElementById('estadoHorometro').value,
+        horometroActual: document.getElementById('horometroActual').value,
+        lugarEntrega: document.getElementById('lugarEntrega').value.trim(),
+        cantidadLitros: document.getElementById('cantidadLitros').value,
+        tipoCombustible: document.getElementById('tipoCombustible').value,
+        firmaOperario: '',
+        firmaResponsable: ''
+      };
+
+      const faltantes = [];
+      if (!data.fecha) faltantes.push('Fecha');
+      if (!data.operario) faltantes.push('Operario');
+      if (!data.equipo) faltantes.push('Equipo');
+      if (!data.codigoInterno) faltantes.push('Código interno');
+      if (!data.estadoHorometro) faltantes.push('Estado de horómetro');
+      if (data.horometroActual === '' || isNaN(Number(data.horometroActual)))
+        faltantes.push('Horómetro actual');
+      if (!data.lugarEntrega) faltantes.push('Lugar de entrega');
+      if (data.cantidadLitros === '' || isNaN(Number(data.cantidadLitros)) || Number(data.cantidadLitros) <= 0)
+        faltantes.push('Cantidad (litros)');
+      if (!data.tipoCombustible) faltantes.push('Tipo de combustible');
+      if (firmaOp.vacia()) faltantes.push('Firma operario');
+      if (firmaResp.vacia()) faltantes.push('Firma responsable');
+
+      if (faltantes.length) {
+        mostrarError('Completá: ' + faltantes.join(', '));
+        return;
+      }
+
+      data.firmaOperario = firmaOp.toDataURL();
+      data.firmaResponsable = firmaResp.toDataURL();
+
+      btn.disabled = true;
+      btn.textContent = 'Enviando…';
+
+      document.getElementById('payload').value = JSON.stringify(data);
+      document.getElementById('apiForm').submit();
+
+      // Timeout: si el iframe no responde en 30s, mostramos error.
+      timeoutEnvio = setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = 'Enviar';
+        mostrarError('Timeout — la conexión no respondió a tiempo. Probá de nuevo.');
+      }, 30000);
+    });
+
+    document.getElementById('btnOtra').addEventListener('click', function() {
+      document.getElementById('fecha').valueAsDate = new Date();
+      ['operario','equipo','codigoTexto','horometroActual','lugarEntrega','cantidadLitros']
+        .forEach(function(id) { document.getElementById(id).value = ''; });
+      document.getElementById('estadoHorometro').value = '';
+      document.getElementById('tipoCombustible').value = '';
+      const sel = document.getElementById('codigoSelect');
+      if (!sel.classList.contains('hidden')) sel.value = '';
+      firmaOp.borrar();
+      firmaResp.borrar();
+      ocultarEstado();
+      document.getElementById('okCard').classList.add('hidden');
+      document.getElementById('formCard').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  </script>
+</body>
+</html>

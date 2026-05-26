@@ -1,0 +1,7 @@
+docs/**
+README.md
+.git/**
+.gitignore
+.claspignore
+*.md
+*.check.js

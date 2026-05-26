@@ -1,0 +1,19 @@
+# clasp project link (contiene tu script ID, distinto por usuario)
+.clasp.json
+
+# Claude Code local settings
+.claude/
+
+# Archivos temporales de validación
+*.check.js
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+# Node (no usamos, pero por las dudas)
+node_modules/

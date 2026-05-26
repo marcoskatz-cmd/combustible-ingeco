@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <?!= include('estilos'); ?>
+</head>
+<body>
+  <header class="app">
+    <div class="marca">INGECO</div>
+    <h1>Control de combustible</h1>
+  </header>
+
+  <div class="wrap menu-botones">
+    <div class="card">
+      <p style="margin:0 0 14px 0; color:var(--gris-txt-tenue); text-align:center;">
+        Elegí qué querés cargar:
+      </p>
+      <a class="btn" href="?page=entrega">Entrega de combustible</a>
+      <a class="btn btn-secundario" href="?page=reposicion">Reposición de combustible</a>
+      <a class="btn btn-secundario" href="?page=stock">Stock inicial de combustible</a>
+    </div>
+  </div>
+</body>
+</html>

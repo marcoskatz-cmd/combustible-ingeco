@@ -1,0 +1,196 @@
+:root {
+  --azul: #0a4d8c;
+  --azul-osc: #073864;
+  --verde: #1f9d55;
+  --rojo: #c53030;
+  --gris-bg: #f3f4f6;
+  --gris-borde: #d1d5db;
+  --gris-txt: #374151;
+  --gris-txt-tenue: #6b7280;
+  --radio: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--gris-bg);
+  color: var(--gris-txt);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header.app {
+  background: var(--azul);
+  color: white;
+  padding: 18px 16px;
+  text-align: center;
+}
+header.app .marca {
+  font-size: 14px;
+  letter-spacing: 2px;
+  opacity: 0.85;
+}
+header.app h1 {
+  margin: 4px 0 0 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.card {
+  background: white;
+  border-radius: var(--radio);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 18px 16px;
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin: 14px 0 6px 0;
+  color: var(--gris-txt);
+}
+label .req { color: var(--rojo); }
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 17px;
+  border: 1px solid var(--gris-borde);
+  border-radius: var(--radio);
+  background: white;
+  color: var(--gris-txt);
+  appearance: none;
+  -webkit-appearance: none;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--azul);
+  box-shadow: 0 0 0 3px rgba(10,77,140,0.15);
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radio);
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  color: white;
+  background: var(--azul);
+  transition: background 0.15s;
+}
+.btn:active { background: var(--azul-osc); }
+.btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+.btn-secundario {
+  background: white;
+  color: var(--azul);
+  border: 1px solid var(--azul);
+}
+.btn-secundario:active { background: #eef4fb; }
+
+.btn-gris {
+  background: #e5e7eb;
+  color: var(--gris-txt);
+}
+
+.menu-botones a.btn {
+  margin-bottom: 12px;
+}
+
+.firma-wrap {
+  border: 1px solid var(--gris-borde);
+  border-radius: var(--radio);
+  background: #fafafa;
+  overflow: hidden;
+}
+.firma-canvas {
+  display: block;
+  width: 100%;
+  height: 200px;
+  background: white;
+  touch-action: none;
+  cursor: crosshair;
+}
+.firma-acciones {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px;
+}
+.firma-acciones button {
+  background: transparent;
+  border: none;
+  color: var(--azul);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.estado {
+  padding: 12px;
+  border-radius: var(--radio);
+  margin-top: 12px;
+  font-size: 15px;
+}
+.estado.err {
+  background: #fef2f2;
+  color: var(--rojo);
+  border: 1px solid #fecaca;
+}
+.estado.info {
+  background: #eff6ff;
+  color: var(--azul);
+  border: 1px solid #bfdbfe;
+}
+
+.ok-wrap {
+  text-align: center;
+  padding: 30px 16px;
+}
+.ok-tilde {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--verde);
+  color: white;
+  margin: 0 auto 16px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  font-weight: bold;
+}
+.ok-msg {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 18px;
+  color: var(--gris-txt);
+}
+
+.hidden { display: none !important; }
+
+small.help {
+  display: block;
+  margin-top: 4px;
+  color: var(--gris-txt-tenue);
+  font-size: 13px;
+}
