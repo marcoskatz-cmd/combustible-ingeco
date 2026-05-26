@@ -5,4 +5,4 @@
 //
 // REEMPLAZAR con la URL que te dio Cloudflare al deployar worker/proxy.js.
 // Ej: "https://combustible-proxy.tu-usuario.workers.dev"
-window.PROXY_URL = "https://combustible-ingeco.marcoskatz.workers.dev";
+window.PROXY_URL = "https://combustible-ingeco-proxy.marcoskatz.workers.dev";
