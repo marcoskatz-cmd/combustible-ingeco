@@ -442,13 +442,25 @@ function getUltimasEntregas(n) {
     const data = sh.getRange(2, 1, sh.getLastRow() - 1, 12).getValues();
     const rows = data
       .filter(function(r) { return r[0]; })
+      // Anotamos el índice original para usarlo como desempate final.
+      .map(function(r, i) { return { r: r, i: i }; })
       .sort(function(a, b) {
-        const ta = a[11] instanceof Date ? a[11].getTime() : 0;
-        const tb = b[11] instanceof Date ? b[11].getTime() : 0;
-        return tb - ta;
+        // 1) TIMESTAMP (col 11) si existe como Date
+        const ta = a.r[11] instanceof Date ? a.r[11].getTime() : null;
+        const tb = b.r[11] instanceof Date ? b.r[11].getTime() : null;
+        if (ta !== null && tb !== null) return tb - ta;
+        if (ta !== null) return -1;
+        if (tb !== null) return 1;
+        // 2) FECHA (col 0) — intentamos parsearla cuando es Date o string
+        const fa = _parseFechaCeldaToTime(a.r[0]);
+        const fb = _parseFechaCeldaToTime(b.r[0]);
+        if (fa !== fb) return fb - fa;
+        // 3) Desempate: fila más nueva primero (índice mayor = pegada después)
+        return b.i - a.i;
       })
       .slice(0, cantidad)
-      .map(function(r) {
+      .map(function(x) {
+        const r = x.r;
         return {
           fecha:           r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, 'yyyy-MM-dd') : String(r[0]),
           operario:        String(r[1] || ''),
@@ -465,4 +477,25 @@ function getUltimasEntregas(n) {
   } catch (err) {
     return { ok: false, error: (err && err.message) ? err.message : String(err) };
   }
+}
+
+// Parsea el valor de la celda FECHA a milisegundos para ordenar.
+// Acepta Date real, "yyyy-MM-dd", "MM-dd-yyyy", "dd/MM/yyyy", etc.
+function _parseFechaCeldaToTime(v) {
+  if (v instanceof Date) return v.getTime();
+  const s = String(v || '').trim();
+  if (!s) return 0;
+  // yyyy-MM-dd o yyyy/MM/dd
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  // MM-dd-yyyy o MM/dd/yyyy (formato US, como aparecía en los datos pegados)
+  m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (m) {
+    const a = +m[1], b = +m[2], y = +m[3];
+    // Si a > 12, era dd-MM-yyyy; si no, asumimos MM-dd-yyyy (más común en exports de Sheets)
+    if (a > 12) return new Date(y, b - 1, a).getTime();
+    return new Date(y, a - 1, b).getTime();
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
 }

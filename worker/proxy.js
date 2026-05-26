@@ -59,6 +59,11 @@ export default {
       method: request.method,
       headers: {},
       redirect: "follow",
+      // CRÍTICO: Apps Script responde con 302 a googleusercontent.com con un
+      // user_content_key de un solo uso. Si Cloudflare cachea ese redirect,
+      // la 2da request devuelve la página default (key expirado). Desactivamos
+      // el cache de CF para esta request específica.
+      cf: { cacheTtl: 0, cacheEverything: false },
     };
 
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -85,7 +90,12 @@ export default {
 
     return new Response(body, {
       status: upstream.status,
-      headers: { ...CORS_HEADERS, "Content-Type": contentType },
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": contentType,
+        // Que el browser tampoco cachee la respuesta — los datos cambian.
+        "Cache-Control": "no-store",
+      },
     });
   },
 };
