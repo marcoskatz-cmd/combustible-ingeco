@@ -1,3 +1,8 @@
-// URL del Web App de Apps Script (backend de combustible).
-// Si redeployás como deployment nuevo (sin --deploymentId), actualizá esta URL.
-window.API_URL = "https://script.google.com/macros/s/AKfycbywGmkWxwzPA925X6MDKqfsGAJddO3SGG3K3JwZisdL7JrVLcajmRR_Y9yRYvoeAWuP/exec";
+// URL del proxy Cloudflare Worker — único endpoint que llama el frontend.
+// El Worker reenvía a Apps Script y agrega CORS. Existe porque la política
+// Workspace de grupoingeco.com.ar bloquea cross-origin directo a Apps Script.
+// Ver worker/proxy.js y README.md.
+//
+// REEMPLAZAR con la URL que te dio Cloudflare al deployar worker/proxy.js.
+// Ej: "https://combustible-proxy.tu-usuario.workers.dev"
+window.PROXY_URL = "https://REEMPLAZAR-CON-URL-DEL-WORKER.workers.dev";

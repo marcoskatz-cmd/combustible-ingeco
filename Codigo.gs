@@ -34,10 +34,13 @@ const TZ = 'America/Argentina/Buenos_Aires';
 // ====== Router ======
 
 function doGet(e) {
-  // ---- JSONP endpoints para frontend en GitHub Pages ----
-  // Esquivamos CORS usando un <script src> en el cliente.
-  if (e && e.parameter && e.parameter.callback) {
-    const cb = String(e.parameter.callback).replace(/[^a-zA-Z0-9_]/g, '');
+  // ---- API endpoints (consumidos por el frontend vía Cloudflare Worker proxy) ----
+  // Si viene 'callback' devolvemos JSONP (legacy). Si viene 'api' sin callback,
+  // devolvemos JSON puro — el Worker le agrega los headers CORS al pasarlo.
+  if (e && e.parameter && e.parameter.api) {
+    const cb = e.parameter.callback
+      ? String(e.parameter.callback).replace(/[^a-zA-Z0-9_]/g, '')
+      : null;
     let result;
     switch (e.parameter.api) {
       case 'codigos':  result = getCodigosEquipos(); break;
@@ -45,9 +48,13 @@ function doGet(e) {
       case 'entregas': result = getUltimasEntregas(e.parameter.n); break;
       default:         result = { ok: false, error: 'API desconocida: ' + String(e.parameter.api) };
     }
-    return ContentService
-      .createTextOutput(cb + '(' + JSON.stringify(result) + ');')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    const json = JSON.stringify(result);
+    if (cb) {
+      return ContentService.createTextOutput(cb + '(' + json + ');')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(json)
+      .setMimeType(ContentService.MimeType.JSON);
   }
 
   // ---- HTML pages (frontend embebido — fallback, usado si no se accede via GitHub Pages) ----
@@ -70,23 +77,24 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1');
 }
 
-// ====== doPost: API para frontend en GitHub Pages ======
-// El cliente envía un <form> con un único campo "payload" (JSON.stringify de
-// los datos). Esquivamos CORS porque <form> permite POST cross-origin.
-// La respuesta es un HTML pequeño que hace window.parent.postMessage(...),
-// que el cliente escucha desde un iframe oculto.
+// ====== doPost: API para frontend (vía Cloudflare Worker proxy) ======
+// El cliente envía JSON: { action: "guardarEntrega", ...data }
+// Devuelve JSON: { ok: true } o { ok: false, error: "..." }
+//
+// Soportamos también el formato legacy "payload" en form-urlencoded por si
+// alguien usa la URL directa con un <form>. El Worker forwarda como JSON.
 function doPost(e) {
   let data;
   try {
-    if (e && e.parameter && e.parameter.payload) {
-      data = JSON.parse(e.parameter.payload);
-    } else if (e && e.postData && e.postData.contents) {
+    if (e && e.postData && e.postData.contents) {
       data = JSON.parse(e.postData.contents);
+    } else if (e && e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
     } else {
-      return _postMessage({ ok: false, error: 'Sin payload' });
+      return _jsonResponse({ ok: false, error: 'Sin payload' });
     }
   } catch (err) {
-    return _postMessage({ ok: false, error: 'Payload inválido: ' + err.message });
+    return _jsonResponse({ ok: false, error: 'Payload inválido: ' + err.message });
   }
 
   const action = data.action;
@@ -104,24 +112,12 @@ function doPost(e) {
     result = { ok: false, error: (err && err.message) ? err.message : String(err) };
   }
 
-  return _postMessage(result);
+  return _jsonResponse(result);
 }
 
-function _postMessage(obj) {
-  // Escapamos lo que va dentro del <script> para que no rompa el HTML ni
-  // permita inyección de tags.
-  const json = JSON.stringify(obj)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
-  const html =
-    '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
-    '<script>try{window.parent.postMessage(' + json + ',"*");}catch(e){}</script>' +
-    '</body></html>';
-  return HtmlService.createHtmlOutput(html)
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+function _jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function include(nombre) {

@@ -182,27 +182,26 @@
       return Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     }
 
-    // ====== JSONP genérico ======
-    function jsonp(url, timeoutMs) {
+    // ====== Fetch al Cloudflare Worker (que reenvía a Apps Script con CORS) ======
+    async function apiGet(params, timeoutMs) {
       timeoutMs = timeoutMs || 15000;
-      return new Promise(function(resolve, reject) {
-        const cbName = 'cb_' + Math.random().toString(36).slice(2, 10);
-        const script = document.createElement('script');
-        const timer = setTimeout(function() {
-          cleanup();
-          reject(new Error('Timeout'));
-        }, timeoutMs);
-        function cleanup() {
-          try { delete window[cbName]; } catch(_) { window[cbName] = undefined; }
-          if (script.parentNode) script.parentNode.removeChild(script);
-          clearTimeout(timer);
-        }
-        window[cbName] = function(res) { cleanup(); resolve(res); };
-        script.onerror = function() { cleanup(); reject(new Error('Error de red')); };
-        const sep = url.indexOf('?') >= 0 ? '&' : '?';
-        script.src = url + sep + 'callback=' + cbName;
-        document.head.appendChild(script);
-      });
+      const ctrl = new AbortController();
+      const timer = setTimeout(function() { ctrl.abort(); }, timeoutMs);
+      try {
+        const url = new URL(window.PROXY_URL);
+        Object.keys(params).forEach(function(k) {
+          if (params[k] !== undefined && params[k] !== null) url.searchParams.set(k, params[k]);
+        });
+        const resp = await fetch(url.toString(), {
+          method: 'GET',
+          credentials: 'omit',
+          signal: ctrl.signal
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return await resp.json();
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
     // ====== Cargar datos ======
@@ -267,8 +266,8 @@
       setLoadingState(true);
       try {
         const [resumen, ult] = await Promise.all([
-          jsonp(window.API_URL + '?api=resumen'),
-          jsonp(window.API_URL + '?api=entregas&n=20')
+          apiGet({ api: 'resumen' }),
+          apiGet({ api: 'entregas', n: 20 })
         ]);
 
         if (resumen && resumen.ok) {

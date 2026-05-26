@@ -84,20 +84,8 @@
     </div>
   </div>
 
-  <!-- Hidden form + iframe para el truco cross-origin sin CORS.
-       El form hace POST al Apps Script con un único campo "payload"
-       (JSON.stringify de los datos). La respuesta carga en el iframe
-       y desde ahí el Apps Script hace window.parent.postMessage(). -->
-  <form id="apiForm" method="POST" target="apiFrame" style="display:none">
-    <input type="hidden" name="payload" id="payload">
-  </form>
-  <iframe name="apiFrame" id="apiFrame" style="display:none"></iframe>
-
   <script src="config.js"></script>
   <script>
-    // ====== Config ======
-    document.getElementById('apiForm').action = window.API_URL;
-
     // ====== Init ======
     document.getElementById('fecha').valueAsDate = new Date();
 
@@ -186,31 +174,10 @@
     }
     function ocultarEstado() { estado.classList.add('hidden'); }
 
-    // ====== Envío via form + iframe + postMessage ======
+    // ====== Envío via fetch al Cloudflare Worker ======
     const btn = document.getElementById('btnEnviar');
-    let timeoutEnvio = null;
 
-    // Listener para la respuesta del Apps Script (llega via postMessage desde el iframe)
-    window.addEventListener('message', function(ev) {
-      // El iframe es de googleusercontent.com (sub-dominio de Google).
-      // Aceptamos cualquier origen pero validamos forma del mensaje.
-      const res = ev.data;
-      if (!res || typeof res !== 'object' || typeof res.ok !== 'boolean') return;
-
-      if (timeoutEnvio) { clearTimeout(timeoutEnvio); timeoutEnvio = null; }
-      btn.disabled = false;
-      btn.textContent = 'Enviar';
-
-      if (res.ok) {
-        document.getElementById('formCard').classList.add('hidden');
-        document.getElementById('okCard').classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        mostrarError(res.error || 'Error desconocido al guardar.');
-      }
-    });
-
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', async function() {
       ocultarEstado();
 
       const data = {
@@ -254,15 +221,33 @@
       btn.disabled = true;
       btn.textContent = 'Enviando…';
 
-      document.getElementById('payload').value = JSON.stringify(data);
-      document.getElementById('apiForm').submit();
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(function() { ctrl.abort(); }, 60000);
+        const resp = await fetch(window.PROXY_URL, {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const res = await resp.json();
 
-      // Timeout: si el iframe no responde en 30s, mostramos error.
-      timeoutEnvio = setTimeout(function() {
+        if (res.ok) {
+          document.getElementById('formCard').classList.add('hidden');
+          document.getElementById('okCard').classList.remove('hidden');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          mostrarError(res.error || 'Error desconocido al guardar.');
+        }
+      } catch (err) {
+        mostrarError('Error de conexión: ' + (err && err.message ? err.message : err));
+      } finally {
         btn.disabled = false;
         btn.textContent = 'Enviar';
-        mostrarError('Timeout — la conexión no respondió a tiempo. Probá de nuevo.');
-      }, 30000);
+      }
     });
 
     document.getElementById('btnOtra').addEventListener('click', function() {

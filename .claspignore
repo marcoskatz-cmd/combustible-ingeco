@@ -1,4 +1,5 @@
 docs/**
+worker/**
 README.md
 .git/**
 .gitignore
