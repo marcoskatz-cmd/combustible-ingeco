@@ -179,7 +179,7 @@ cmd /c "clasp.cmd deploy --deploymentId AKfycbywGmkWxwzPA925X6MDKqfsGAJddO3SGG3K
 | Pestaña          | Columnas (fila 1, congelada) |
 | ---------------- | ----------------------------- |
 | `ENTREGAS`       | FECHA, OPERARIO, EQUIPO, CODIGO_INTERNO, ESTADO_HOROMETRO, HOROMETRO_ACTUAL, LUGAR_ENTREGA, CANTIDAD_LITROS, TIPO_COMBUSTIBLE, FIRMA_OPERARIO_URL, FIRMA_RESPONSABLE_URL, TIMESTAMP |
-| `REPOSICIONES`   | FECHA, DIESEL_500_LITROS, INFINIA_500_LITROS, TIMESTAMP |
+| `REPOSICIONES`   | FECHA, DIESEL_500_LITROS, INFINIA_500_LITROS, TIMESTAMP, FIRMA_RESPONSABLE_URL |
 | `STOCK_INICIAL`  | FECHA, DIESEL_500_INICIAL_LITROS, INFINIA_500_INICIAL_LITROS, TIMESTAMP |
 
 Firmas: PNG en `FIRMAS COMBUSTIBLE` (Drive). Columna `FIRMA_*_URL` guarda
@@ -206,9 +206,17 @@ mismo formato.
 ## Decisiones técnicas relevantes
 
 ### Balance de stock disponible
-`getResumen()` calcula: `Σ stock inicial + Σ reposiciones − Σ entregas` por
-tipo. Las entradas de "stock inicial" suman (no son un reset). Si querés
-"resetear" el balance, cargá una reposición negativa o editá el sheet.
+`getResumen()` calcula: `Σ STOCK_INICIAL + Σ reposiciones − Σ entregas` por tipo.
+
+La pestaña **STOCK_INICIAL ya no tiene formulario**: es una herramienta de
+**ajuste manual**. El usuario edita filas a mano directamente en el Sheet para:
+- cargar el saldo de apertura (combustible que había antes de arrancar el sistema)
+- corregir el stock por eventualidades (mermas, recuentos, errores)
+
+Los valores pueden ser positivos (sumar) o negativos (restar). Como nadie la
+llena automáticamente a diario, no hay doble conteo. Antes existía un formulario
+de "stock inicial" que se cargaba a diario y duplicaba combustible en el balance
+(sumaba junto a las reposiciones) — por eso se eliminó el formulario.
 
 ### Inconsistencia "Diesel Infinia" / "Infinia 500" ⚠️
 

@@ -31,6 +31,14 @@
       <label>Cantidad de Infinia 500 recargado (litros) <span class="req">*</span></label>
       <input type="number" id="infinia500" inputmode="decimal" min="0" step="0.01" required>
 
+      <label>Firma de responsable (Néstor Leandro Casares) <span class="req">*</span></label>
+      <div class="firma-wrap">
+        <canvas id="firmaResponsable" class="firma-canvas"></canvas>
+        <div class="firma-acciones">
+          <button type="button" data-borrar="firmaResponsable">Borrar</button>
+        </div>
+      </div>
+
       <div id="estado" class="estado hidden"></div>
 
       <div style="height:14px"></div>
@@ -54,6 +62,76 @@
   <script>
     document.getElementById('fecha').valueAsDate = new Date();
 
+    // ====== Firma (canvas pointer events) ======
+    function setupFirma(canvas) {
+      const ctx = canvas.getContext('2d');
+      let drawing = false;
+      let last = null;
+      let vacia = true;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        if (!vacia) return;
+        canvas.width = rect.width * ratio;
+        canvas.height = rect.height * ratio;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(ratio, ratio);
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#111';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      function pos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      }
+
+      canvas.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        drawing = true;
+        last = pos(e);
+      });
+      canvas.addEventListener('pointermove', function(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        const p = pos(e);
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        last = p;
+        vacia = false;
+      });
+      function fin(e) {
+        if (!drawing) return;
+        drawing = false;
+        try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+      }
+      canvas.addEventListener('pointerup', fin);
+      canvas.addEventListener('pointercancel', fin);
+      canvas.addEventListener('pointerleave', fin);
+
+      return {
+        borrar: function() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          vacia = true;
+          resize();
+        },
+        vacia: function() { return vacia; },
+        toDataURL: function() { return canvas.toDataURL('image/png'); }
+      };
+    }
+
+    const firmaResp = setupFirma(document.getElementById('firmaResponsable'));
+    document.querySelectorAll('[data-borrar]').forEach(function(b) {
+      b.addEventListener('click', function() { firmaResp.borrar(); });
+    });
+
     const estado = document.getElementById('estado');
     function mostrarError(msg) {
       estado.textContent = msg;
@@ -71,7 +149,8 @@
         action: 'guardarReposicion',
         fecha: document.getElementById('fecha').value,
         diesel500: document.getElementById('diesel500').value,
-        infinia500: document.getElementById('infinia500').value
+        infinia500: document.getElementById('infinia500').value,
+        firmaResponsable: ''
       };
       const faltantes = [];
       if (!data.fecha) faltantes.push('Fecha');
@@ -79,15 +158,17 @@
         faltantes.push('Diesel 500');
       if (data.infinia500 === '' || isNaN(Number(data.infinia500)) || Number(data.infinia500) < 0)
         faltantes.push('Infinia 500');
+      if (firmaResp.vacia()) faltantes.push('Firma responsable');
       if (faltantes.length) {
         mostrarError('Completá: ' + faltantes.join(', '));
         return;
       }
+      data.firmaResponsable = firmaResp.toDataURL();
       btn.disabled = true;
       btn.textContent = 'Enviando…';
       try {
         const ctrl = new AbortController();
-        const timer = setTimeout(function() { ctrl.abort(); }, 30000);
+        const timer = setTimeout(function() { ctrl.abort(); }, 60000);
         const resp = await fetch(window.PROXY_URL, {
           method: 'POST',
           credentials: 'omit',
@@ -116,6 +197,7 @@
     document.getElementById('btnOtra').addEventListener('click', function() {
       document.getElementById('fecha').valueAsDate = new Date();
       ['diesel500','infinia500'].forEach(function(id) { document.getElementById(id).value = ''; });
+      firmaResp.borrar();
       ocultarEstado();
       document.getElementById('okCard').classList.add('hidden');
       document.getElementById('formCard').classList.remove('hidden');

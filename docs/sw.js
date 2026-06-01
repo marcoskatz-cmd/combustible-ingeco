@@ -13,7 +13,7 @@
  * que los clientes existentes traigan el shell nuevo en la próxima carga.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = 'combustible-shell-' + CACHE_VERSION;
 
 const SHELL_FILES = [
@@ -21,7 +21,6 @@ const SHELL_FILES = [
   './index.html',
   './entrega.html',
   './reposicion.html',
-  './stock.html',
   './resumen.html',
   './estilos.css',
   './config.js',

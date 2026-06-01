@@ -140,7 +140,7 @@ function setup() {
 
   const reposiciones = ss.insertSheet('REPOSICIONES');
   reposiciones.appendRow([
-    'FECHA', 'DIESEL_500_LITROS', 'INFINIA_500_LITROS', 'TIMESTAMP'
+    'FECHA', 'DIESEL_500_LITROS', 'INFINIA_500_LITROS', 'TIMESTAMP', 'FIRMA_RESPONSABLE_URL'
   ]);
   reposiciones.setFrozenRows(1);
 
@@ -299,19 +299,28 @@ function guardarEntrega(data) {
 
 function guardarReposicion(data) {
   try {
-    _validar(data, ['fecha', 'diesel500', 'infinia500']);
+    _validar(data, ['fecha', 'diesel500', 'infinia500', 'firmaResponsable']);
 
     const diesel = _numeroValido(data.diesel500, 0);
     const infinia = _numeroValido(data.infinia500, 0);
     if (diesel === null) throw new Error('Diesel 500 debe ser un número >= 0.');
     if (infinia === null) throw new Error('Infinia 500 debe ser un número >= 0.');
 
+    // Firma del responsable (Néstor Leandro Casares) → PNG en Drive.
+    const urlFirma = _guardarFirma(data.firmaResponsable, 'responsable_reposicion');
+
     const sh = _abrirSheet('REPOSICIONES');
+    // Self-healing del header: agregamos la columna FIRMA_RESPONSABLE_URL (col 5)
+    // si todavía no existe (la pestaña se creó antes de tener firma).
+    if (sh.getRange(1, 5).getValue() !== 'FIRMA_RESPONSABLE_URL') {
+      sh.getRange(1, 5).setValue('FIRMA_RESPONSABLE_URL');
+    }
     sh.appendRow([
       _parseFecha(data.fecha),
       diesel,
       infinia,
-      new Date()
+      new Date(),
+      urlFirma
     ]);
 
     return { ok: true };
@@ -320,6 +329,12 @@ function guardarReposicion(data) {
   }
 }
 
+// DEPRECADO COMO FORMULARIO: se sacó del frontend porque cargarlo a diario
+// duplicaba combustible en el balance. La función queda por compatibilidad,
+// pero ya no se llama desde la app.
+// La pestaña STOCK_INICIAL sigue activa como herramienta de AJUSTE MANUAL:
+// el usuario edita filas a mano para el saldo de apertura o correcciones, y
+// esos valores SÍ cuentan en el balance (ver getResumen).
 function guardarStock(data) {
   try {
     _validar(data, ['fecha', 'diesel500Inicial', 'infinia500Inicial']);
@@ -371,13 +386,19 @@ function getCodigosEquipos() {
 }
 
 // ====== Resumen: stock disponible + últimas entregas ======
-// Balance = Σ stock inicial + Σ reposiciones − Σ entregas (por tipo).
-// Se asume que "Stock inicial" suma cada vez que se carga (no es un reset).
+// Balance = Σ STOCK_INICIAL + Σ reposiciones − Σ entregas (por tipo).
+//
+// La pestaña STOCK_INICIAL ya NO tiene formulario: pasó a ser una herramienta
+// de AJUSTE MANUAL. El usuario edita filas directamente en el Sheet para:
+//   - cargar el saldo de apertura (lo que había antes de arrancar el sistema)
+//   - corregir el stock por eventualidades (mermas, recuentos, errores, etc.)
+// Como nadie la llena automáticamente a diario, no hay doble conteo. Los
+// valores pueden ser positivos (sumar) o negativos (restar/corregir).
 //
 // IMPORTANTE: normalizamos los nombres de combustible para que el cálculo
 // funcione a pesar de la inconsistencia heredada de los formularios viejos:
 //   - ENTREGAS guarda "Diesel 500" o "Diesel Infinia"
-//   - REPOSICIONES/STOCK_INICIAL guardan columnas DIESEL_500_* e INFINIA_500_*
+//   - REPOSICIONES / STOCK_INICIAL guardan columnas DIESEL_500_* e INFINIA_500_*
 // Tratamos "Diesel Infinia" e "Infinia 500" como el mismo tipo a efectos del balance.
 function getResumen() {
   try {
@@ -386,6 +407,7 @@ function getResumen() {
     let diesel500 = 0;
     let infinia500 = 0;
 
+    // Ajustes manuales (saldo de apertura + correcciones). Pueden ser negativos.
     const stockSheet = ss.getSheetByName('STOCK_INICIAL');
     if (stockSheet && stockSheet.getLastRow() > 1) {
       const stockData = stockSheet.getRange(2, 1, stockSheet.getLastRow() - 1, 3).getValues();
