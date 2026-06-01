@@ -17,3 +17,6 @@ Thumbs.db
 
 # Node (no usamos, pero por las dudas)
 node_modules/
+
+# Wrangler local cache (account_id metadata + estado)
+worker/.wrangler/
