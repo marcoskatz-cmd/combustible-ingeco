@@ -9,12 +9,6 @@
  *   3) Copiar SHEET_ID y CARPETA_FIRMAS_ID del log a las constantes de abajo
  *   4) clasp push
  *   5) clasp deploy (Web App)
- *
- * NOMENCLATURA INCONSISTENTE A REVISAR:
- *   - Form de Entrega usa "Diesel Infinia"
- *   - Forms de Reposición y Stock usan "Infinia 500"
- * Mantenemos los textos como los conocen los operarios desde Jotform,
- * pero a futuro conviene normalizar a un único valor canónico (ver README).
  */
 
 // ====== CONFIGURACIÓN — pegar después de correr setup() ======
@@ -22,31 +16,28 @@ const SHEET_ID = '1e29HCQaXK3hLhD0Lk4YA78kI8YRq4JEFbZCevKcjONk';
 const CARPETA_FIRMAS_ID = '15q4K7wT_O_m_O5EOJzV_oW01SF4B32aH';
 
 // ====== Códigos de equipos (mejora recomendada) ======
-// ID del Sheet de INGECO con códigos válidos de equipos (4 pestañas)
 const SHEET_CODIGOS_ID = '1JKVZB43VqhIenkrefSefcZrqy8_7QADHPPHqKi4OkH4';
-// Dropdown desactivado por decisión del usuario: el campo de código en el form
-// de entrega es texto libre. El endpoint JSONP queda disponible por si en el
-// futuro se quiere volver a habilitar, pero el frontend ya no lo consume.
 const USAR_DROPDOWN_CODIGOS = false;
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
+// ====== Deduplicación ======
+const VENTANA_DUPLICADO_MIN = 15; // minutos
+
 // ====== Router ======
 
 function doGet(e) {
-  // ---- API endpoints (consumidos por el frontend vía Cloudflare Worker proxy) ----
-  // Si viene 'callback' devolvemos JSONP (legacy). Si viene 'api' sin callback,
-  // devolvemos JSON puro — el Worker le agrega los headers CORS al pasarlo.
   if (e && e.parameter && e.parameter.api) {
     const cb = e.parameter.callback
       ? String(e.parameter.callback).replace(/[^a-zA-Z0-9_]/g, '')
       : null;
     let result;
     switch (e.parameter.api) {
-      case 'codigos':  result = getCodigosEquipos(); break;
-      case 'resumen':  result = getResumen(); break;
-      case 'entregas': result = getUltimasEntregas(e.parameter.n); break;
-      default:         result = { ok: false, error: 'API desconocida: ' + String(e.parameter.api) };
+      case 'codigos':            result = getCodigosEquipos(); break;
+      case 'resumen':            result = getResumen(); break;
+      case 'entregas':           result = getUltimasEntregas(e.parameter.n); break;
+      case 'verificarDuplicado': result = verificarDuplicado(e.parameter.equipo, e.parameter.tipo); break;
+      default:                   result = { ok: false, error: 'API desconocida: ' + String(e.parameter.api) };
     }
     const json = JSON.stringify(result);
     if (cb) {
@@ -57,7 +48,6 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // ---- HTML pages (frontend embebido — fallback, usado si no se accede via GitHub Pages) ----
   const page = (e && e.parameter && e.parameter.page) || 'menu';
   const titulos = {
     menu: 'Combustible INGECO',
@@ -77,12 +67,6 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1');
 }
 
-// ====== doPost: API para frontend (vía Cloudflare Worker proxy) ======
-// El cliente envía JSON: { action: "guardarEntrega", ...data }
-// Devuelve JSON: { ok: true } o { ok: false, error: "..." }
-//
-// Soportamos también el formato legacy "payload" en form-urlencoded por si
-// alguien usa la URL directa con un <form>. El Worker forwarda como JSON.
 function doPost(e) {
   let data;
   try {
@@ -150,7 +134,6 @@ function setup() {
   ]);
   stock.setFrozenRows(1);
 
-  // Borrar la Hoja 1 / Sheet1 por defecto si quedó vacía
   const todas = ss.getSheets();
   for (const sh of todas) {
     const n = sh.getName();
@@ -163,8 +146,6 @@ function setup() {
   const carpeta = DriveApp.createFolder('FIRMAS COMBUSTIBLE');
   const carpetaId = carpeta.getId();
 
-  // Compartir Spreadsheet como "cualquiera con el link puede ver" — necesario
-  // para que el panel INGECOV pueda consumirlo vía gviz a futuro.
   DriveApp.getFileById(ssId).setSharing(
     DriveApp.Access.ANYONE_WITH_LINK,
     DriveApp.Permission.VIEW
@@ -177,7 +158,7 @@ function setup() {
   Logger.log('Pegá estos IDs en las constantes al tope de Codigo.gs y hacé clasp push.');
 }
 
-// ====== Helpers de guardado ======
+// ====== Helpers ======
 
 function _validar(data, requeridos) {
   for (const campo of requeridos) {
@@ -198,8 +179,6 @@ function _abrirSheet(nombre) {
   return sh;
 }
 
-// El input type="date" devuelve "YYYY-MM-DD". Lo convertimos a Date local
-// para que Sheets lo interprete como celda de fecha y no como string.
 function _parseFecha(s) {
   if (s instanceof Date) return s;
   if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)) {
@@ -235,11 +214,71 @@ function _guardarFirma(dataUrl, rol) {
   return file.getUrl();
 }
 
-// ====== Endpoints expuestos al cliente (google.script.run) ======
+// Normaliza para comparar equipos: minúsculas, sin acentos, espacios colapsados
+function _normalizar(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+// ====== Deduplicación ======
+
+function verificarDuplicado(equipo, tipoCombustible) {
+  try {
+    if (!SHEET_ID) return { ok: true, isDuplicate: false };
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sh = ss.getSheetByName('ENTREGAS');
+    if (!sh || sh.getLastRow() < 2) return { ok: true, isDuplicate: false };
+
+    const ahora = new Date();
+    const limite = ahora.getTime() - VENTANA_DUPLICADO_MIN * 60 * 1000;
+
+    const equipoNorm = _normalizar(equipo);
+    const tipoNorm = _normalizar(tipoCombustible);
+
+    // Solo miramos las últimas 30 filas (más que suficiente para 15 min)
+    const lastRow = sh.getLastRow();
+    const desde = Math.max(2, lastRow - 29);
+    const cant = lastRow - desde + 1;
+    const data = sh.getRange(desde, 1, cant, 12).getValues();
+
+    for (let i = data.length - 1; i >= 0; i--) {
+      const row = data[i];
+      const timestamp = row[11]; // columna TIMESTAMP
+      const ts = timestamp instanceof Date ? timestamp.getTime() : 0;
+      if (ts === 0) continue;
+      if (ts < limite) break; // ya salimos de la ventana, el resto es más viejo
+
+      const equipoRow = _normalizar(row[2]);
+      const tipoRow = _normalizar(row[8]);
+
+      if (equipoRow === equipoNorm && tipoRow === tipoNorm) {
+        const hace = Math.max(1, Math.round((ahora.getTime() - ts) / 60000));
+        return {
+          ok: true,
+          isDuplicate: true,
+          mensaje: 'Hace ' + hace + ' minuto(s) ya se registró una carga al mismo equipo "' +
+                   String(row[2]).trim() + '" (' + String(row[7]) + ' L, ' + String(row[8]).trim() + ').',
+          timestamp: Utilities.formatDate(new Date(ts), TZ, 'HH:mm'),
+          litros: Number(row[7]) || 0
+        };
+      }
+    }
+
+    return { ok: true, isDuplicate: false };
+  } catch (err) {
+    // Si falla la verificación, NO bloqueamos la carga (fail-open)
+    return { ok: true, isDuplicate: false, error: (err && err.message) ? err.message : String(err) };
+  }
+}
+
+// ====== Endpoints expuestos al cliente ======
 
 function guardarEntrega(data) {
   try {
-    // El horómetro NO es requerido cuando estado === 'No funciona' — se valida aparte.
     _validar(data, [
       'fecha', 'operario', 'equipo', 'codigoInterno', 'estadoHorometro',
       'lugarEntrega', 'cantidadLitros', 'tipoCombustible',
@@ -256,8 +295,6 @@ function guardarEntrega(data) {
       throw new Error('Estado de horómetro inválido.');
     }
 
-    // Si el horómetro funciona, exigimos número >= 0. Si no funciona,
-    // dejamos la celda vacía para que sea evidente que no aplica.
     let horometro = '';
     if (data.estadoHorometro === 'Sí funciona') {
       const h = _numeroValido(data.horometroActual, 0);
@@ -270,6 +307,20 @@ function guardarEntrega(data) {
     const tiposValidos = ['Diesel 500', 'Diesel Infinia'];
     if (tiposValidos.indexOf(data.tipoCombustible) < 0) {
       throw new Error('Tipo de combustible inválido.');
+    }
+
+    // === Verificación de duplicado (antes de subir firmas para no dejar basura en Drive) ===
+    // Si el cliente confirmó explícitamente (data.forzar === true) salteamos el chequeo.
+    if (data.forzar !== true) {
+      const dupCheck = verificarDuplicado(data.equipo, data.tipoCombustible);
+      if (dupCheck.isDuplicate) {
+        return {
+          ok: false,
+          isDuplicate: true,
+          warning: dupCheck.mensaje,
+          timestamp: dupCheck.timestamp
+        };
+      }
     }
 
     const urlFirmaOp = _guardarFirma(data.firmaOperario, 'operario');
@@ -306,12 +357,10 @@ function guardarReposicion(data) {
     if (diesel === null) throw new Error('Diesel 500 debe ser un número >= 0.');
     if (infinia === null) throw new Error('Infinia 500 debe ser un número >= 0.');
 
-    // Firma del responsable (Néstor Leandro Casares) → PNG en Drive.
     const urlFirma = _guardarFirma(data.firmaResponsable, 'responsable_reposicion');
 
     const sh = _abrirSheet('REPOSICIONES');
-    // Self-healing del header: agregamos la columna FIRMA_RESPONSABLE_URL (col 5)
-    // si todavía no existe (la pestaña se creó antes de tener firma).
+    // Self-healing: agrega columna FIRMA_RESPONSABLE_URL si no existe
     if (sh.getRange(1, 5).getValue() !== 'FIRMA_RESPONSABLE_URL') {
       sh.getRange(1, 5).setValue('FIRMA_RESPONSABLE_URL');
     }
@@ -329,12 +378,7 @@ function guardarReposicion(data) {
   }
 }
 
-// DEPRECADO COMO FORMULARIO: se sacó del frontend porque cargarlo a diario
-// duplicaba combustible en el balance. La función queda por compatibilidad,
-// pero ya no se llama desde la app.
-// La pestaña STOCK_INICIAL sigue activa como herramienta de AJUSTE MANUAL:
-// el usuario edita filas a mano para el saldo de apertura o correcciones, y
-// esos valores SÍ cuentan en el balance (ver getResumen).
+// DEPRECADO como formulario — la pestaña STOCK_INICIAL sigue activa como ajuste manual
 function guardarStock(data) {
   try {
     _validar(data, ['fecha', 'diesel500Inicial', 'infinia500Inicial']);
@@ -358,9 +402,6 @@ function guardarStock(data) {
   }
 }
 
-// ====== Códigos de equipos para dropdown ======
-// Lee las 4 pestañas del Sheet de códigos. Asume primera columna = código,
-// fila 1 = header. Si la estructura cambia, ajustar acá.
 function getCodigosEquipos() {
   if (!USAR_DROPDOWN_CODIGOS) return { ok: false, codigos: [] };
 
@@ -385,21 +426,6 @@ function getCodigosEquipos() {
   }
 }
 
-// ====== Resumen: stock disponible + últimas entregas ======
-// Balance = Σ STOCK_INICIAL + Σ reposiciones − Σ entregas (por tipo).
-//
-// La pestaña STOCK_INICIAL ya NO tiene formulario: pasó a ser una herramienta
-// de AJUSTE MANUAL. El usuario edita filas directamente en el Sheet para:
-//   - cargar el saldo de apertura (lo que había antes de arrancar el sistema)
-//   - corregir el stock por eventualidades (mermas, recuentos, errores, etc.)
-// Como nadie la llena automáticamente a diario, no hay doble conteo. Los
-// valores pueden ser positivos (sumar) o negativos (restar/corregir).
-//
-// IMPORTANTE: normalizamos los nombres de combustible para que el cálculo
-// funcione a pesar de la inconsistencia heredada de los formularios viejos:
-//   - ENTREGAS guarda "Diesel 500" o "Diesel Infinia"
-//   - REPOSICIONES / STOCK_INICIAL guardan columnas DIESEL_500_* e INFINIA_500_*
-// Tratamos "Diesel Infinia" e "Infinia 500" como el mismo tipo a efectos del balance.
 function getResumen() {
   try {
     const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -407,7 +433,7 @@ function getResumen() {
     let diesel500 = 0;
     let infinia500 = 0;
 
-    // Ajustes manuales (saldo de apertura + correcciones). Pueden ser negativos.
+    // Ajustes manuales (saldo apertura + correcciones). Pueden ser negativos.
     const stockSheet = ss.getSheetByName('STOCK_INICIAL');
     if (stockSheet && stockSheet.getLastRow() > 1) {
       const stockData = stockSheet.getRange(2, 1, stockSheet.getLastRow() - 1, 3).getValues();
@@ -442,7 +468,6 @@ function getResumen() {
       }
     }
 
-    // Redondeo a 2 decimales para evitar ruido tipo 1234.5000000001
     diesel500  = Math.round(diesel500  * 100) / 100;
     infinia500 = Math.round(infinia500 * 100) / 100;
 
@@ -459,8 +484,6 @@ function getResumen() {
   }
 }
 
-// Últimas N entregas (sin filtrar por operario — todos ven la actividad
-// completa para tener contexto, y cada uno ve las suyas entre medio).
 function getUltimasEntregas(n) {
   try {
     const cantidad = Math.min(Math.max(Number(n) || 20, 1), 100);
@@ -471,20 +494,16 @@ function getUltimasEntregas(n) {
     const data = sh.getRange(2, 1, sh.getLastRow() - 1, 12).getValues();
     const rows = data
       .filter(function(r) { return r[0]; })
-      // Anotamos el índice original para usarlo como desempate final.
       .map(function(r, i) { return { r: r, i: i }; })
       .sort(function(a, b) {
-        // 1) TIMESTAMP (col 11) si existe como Date
         const ta = a.r[11] instanceof Date ? a.r[11].getTime() : null;
         const tb = b.r[11] instanceof Date ? b.r[11].getTime() : null;
         if (ta !== null && tb !== null) return tb - ta;
         if (ta !== null) return -1;
         if (tb !== null) return 1;
-        // 2) FECHA (col 0) — intentamos parsearla cuando es Date o string
         const fa = _parseFechaCeldaToTime(a.r[0]);
         const fb = _parseFechaCeldaToTime(b.r[0]);
         if (fa !== fb) return fb - fa;
-        // 3) Desempate: fila más nueva primero (índice mayor = pegada después)
         return b.i - a.i;
       })
       .slice(0, cantidad)
@@ -508,20 +527,15 @@ function getUltimasEntregas(n) {
   }
 }
 
-// Parsea el valor de la celda FECHA a milisegundos para ordenar.
-// Acepta Date real, "yyyy-MM-dd", "MM-dd-yyyy", "dd/MM/yyyy", etc.
 function _parseFechaCeldaToTime(v) {
   if (v instanceof Date) return v.getTime();
   const s = String(v || '').trim();
   if (!s) return 0;
-  // yyyy-MM-dd o yyyy/MM/dd
   let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
-  // MM-dd-yyyy o MM/dd/yyyy (formato US, como aparecía en los datos pegados)
   m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (m) {
     const a = +m[1], b = +m[2], y = +m[3];
-    // Si a > 12, era dd-MM-yyyy; si no, asumimos MM-dd-yyyy (más común en exports de Sheets)
     if (a > 12) return new Date(y, b - 1, a).getTime();
     return new Date(y, a - 1, b).getTime();
   }
