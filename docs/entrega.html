@@ -210,6 +210,26 @@
     // ====== Envío via fetch al Cloudflare Worker ======
     const btn = document.getElementById('btnEnviar');
 
+    async function enviarEntrega(data, forzar) {
+      const payload = Object.assign({}, data, { forzar: forzar === true });
+      const ctrl = new AbortController();
+      const timer = setTimeout(function() { ctrl.abort(); }, 60000);
+      try {
+        const resp = await fetch(window.PROXY_URL, {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return await resp.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     btn.addEventListener('click', async function() {
       ocultarEstado();
 
@@ -259,25 +279,31 @@
       btn.textContent = 'Enviando…';
 
       try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(function() { ctrl.abort(); }, 60000);
-        const resp = await fetch(window.PROXY_URL, {
-          method: 'POST',
-          credentials: 'omit',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-          signal: ctrl.signal
-        });
-        clearTimeout(timer);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const res = await resp.json();
+        let res = await enviarEntrega(data, false);
 
-        if (res.ok) {
+        if (res && res.isDuplicate) {
+          const confirmar = confirm(
+            '⚠️ ATENCIÓN: posible carga repetida\n\n' +
+            (res.warning || 'Ya se registró una carga al mismo equipo hace pocos minutos.') +
+            (res.timestamp ? '\n\nHora del registro anterior: ' + res.timestamp : '') +
+            '\n\n¿Es una entrega DISTINTA y querés registrarla igual?'
+          );
+          if (!confirmar) {
+            mostrarError('Carga cancelada. No se registró nada.');
+            btn.disabled = false;
+            btn.textContent = 'Enviar';
+            return;
+          }
+          btn.textContent = 'Enviando…';
+          res = await enviarEntrega(data, true);
+        }
+
+        if (res && res.ok) {
           document.getElementById('formCard').classList.add('hidden');
           document.getElementById('okCard').classList.remove('hidden');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
-          mostrarError(res.error || 'Error desconocido al guardar.');
+          mostrarError((res && res.error) ? res.error : 'Error desconocido al guardar.');
         }
       } catch (err) {
         mostrarError('Error de conexión: ' + (err && err.message ? err.message : err));
