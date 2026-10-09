@@ -1,35 +1,12 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>Combustible INGECO</title>
-  <link rel="stylesheet" href="estilos.css">
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0a4d8c">
-  <link rel="icon" href="icons/favicon-32.png">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Combustible">
-  <script src="pwa.js" defer></script>
-</head>
-<body>
-  <header class="app">
-    <div class="marca">INGECO</div>
-    <h1>Control de combustible</h1>
-  </header>
-
-  <div class="wrap menu-botones">
-    <div class="card">
-      <p style="margin:0 0 14px 0; color:var(--gris-txt-tenue); text-align:center;">
-        Elegí qué querés hacer:
-      </p>
-      <a class="btn" href="entrega.html">Entrega de combustible</a>
-      <a class="btn btn-secundario" href="reposicion.html">Reposición de combustible</a>
-      <div style="height:10px"></div>
-      <a class="btn btn-gris" href="resumen.html">Ver estado y últimas entregas</a>
-    </div>
-  </div>
-</body>
-</html>
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Combustible — INGECO</title><link rel="canonical" href="https://script.google.com/a/macros/grupoingeco.com.ar/s/AKfycbzxtWbL6A6xsXqRBx6yGDuSYKWEBebmc68dXlkgGiU5-BesLfal03PsPxZ8sFRDrCo8Cw/exec"></head>
+<body style="font-family:system-ui;background:#1f3a8a;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center">
+<p>Esta app se mudó. Te llevamos a la nueva versión…<br><a href="https://script.google.com/a/macros/grupoingeco.com.ar/s/AKfycbzxtWbL6A6xsXqRBx6yGDuSYKWEBebmc68dXlkgGiU5-BesLfal03PsPxZ8sFRDrCo8Cw/exec" style="color:#fff">Si no abre sola, tocá acá</a></p>
+<script>
+(async function(){
+  // Limpiar la PWA vieja (service worker + caché) para que no siga sirviendo la versión anterior.
+  try { if ('serviceWorker' in navigator) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } } catch (e) {}
+  try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch (e) {}
+  location.replace("https://script.google.com/a/macros/grupoingeco.com.ar/s/AKfycbzxtWbL6A6xsXqRBx6yGDuSYKWEBebmc68dXlkgGiU5-BesLfal03PsPxZ8sFRDrCo8Cw/exec" + (location.search || ""));
+})();
+</script><noscript><meta http-equiv="refresh" content="0; url=https://script.google.com/a/macros/grupoingeco.com.ar/s/AKfycbzxtWbL6A6xsXqRBx6yGDuSYKWEBebmc68dXlkgGiU5-BesLfal03PsPxZ8sFRDrCo8Cw/exec"></noscript></body></html>
